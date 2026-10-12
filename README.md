@@ -35,3 +35,7 @@ See [docs/IOS_EXPORT.md](docs/IOS_EXPORT.md) for iPhone/iPad. The web build is e
 - `scripts/ui/` screens, tube drawing and UI widgets (all drawn in code)
 - `scripts/autoload/` progress, audio and settings singletons
 - `tools/` icon renderer and procedural audio generator
+
+## License
+
+[MIT](LICENSE) - covers the code and also the generated sounds, music and icon.
