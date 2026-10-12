@@ -3,7 +3,8 @@
 A relaxing water-sort puzzle game made with **Godot 4.7** (GDScript): 100 levels, glass-tube visuals,
 animated pours, hints, undo, colour-blind symbols, a first-time tutorial, sound effects and ambient music.
 
-**Play in your browser:** https://vp125.github.io/water-sort/ (best on a phone; add to Home Screen)
+**Play in your browser:** https://vp125.github.io/water-sort/ (best on a phone; add to Home Screen)  
+**Also on itch.io:** https://lukeluke125.itch.io/water-sort
 
 ## Rules
 Pour the top colour of one tube onto another tube that is empty or has the same top colour. A pour moves
