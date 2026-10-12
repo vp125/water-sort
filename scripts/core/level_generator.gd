@@ -44,7 +44,17 @@ static func config_for(level: int) -> Dictionary:
 
 
 ## Returns Array of Array[int] (bottom -> top).
+## Levels are pre-computed (BakedLevels) because building a few of them takes 0.5-0.9 s even on a
+## fast PC, several times that in a browser, which freezes the game and the audio with it.
+## `tools/bake_levels.gd` regenerates the data; the tests fail if it ever drifts from the generator.
 static func generate(level: int) -> Array:
+	if BakedLevels.LEVELS.has(level):
+		return (BakedLevels.LEVELS[level] as Array).duplicate(true)
+	return generate_uncached(level)
+
+
+## Always runs the generator (and the solver for verified levels), ignoring BakedLevels.
+static func generate_uncached(level: int) -> Array:
 	return generate_with_solution(level)["tubes"]
 
 

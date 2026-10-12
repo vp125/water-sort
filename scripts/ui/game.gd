@@ -10,6 +10,7 @@ const MIN_LAYOUT_SCALE := 0.45  # smallest uniform shrink applied to fit short s
 const POUR_ANGLE := 0.75  # radians the source tube tilts while pouring
 const POUR_HEIGHT := 50.0  # how far above the target's top the lip hovers
 const HINT_BUDGET := 8000  # solver node limit for a hint
+const HINT_SLICE_USEC := 8000  # solver time per frame while "thinking": long searches must not freeze the game
 const POUR_BASE_TIME := 0.2  # stream time = base + per_unit * units; matches the pour sounds
 const POUR_TIME_PER_UNIT := 0.15
 
@@ -30,6 +31,7 @@ var _tut_after_pour := false
 var _overlay: TutorialOverlay
 var _footer: HBoxContainer
 var _settings: SettingsPanel
+var _hint_job: PuzzleSolver  # a hint search in progress (see _process); null when idle
 var _bottom_reserve := 0.0  # board space kept free for the tutorial card sitting above the footer
 
 var _board: Control
@@ -225,6 +227,11 @@ func _avail_height() -> float:
 
 
 func _process(_delta: float) -> void:
+	if _hint_job != null:
+		_hint_job.step(HINT_SLICE_USEC)
+		if _hint_job.done:
+			_finish_hint()
+		return
 	# The card's height depends on its text, so follow it and re-lay out the tubes when it changes.
 	# Never mid-pour: moving tubes would yank the animated one out of its path.
 	if _busy:
@@ -417,7 +424,18 @@ func _on_hint() -> void:
 		return
 	_clear_hint()
 	_select(-1)
-	var solution: Variant = PuzzleSolver.solve(_state.tubes, _state.capacity, HINT_BUDGET)
+	# Search a little each frame: a long solve would freeze the game (and the audio) for a moment.
+	_hint_job = PuzzleSolver.begin(_state.tubes, _state.capacity, HINT_BUDGET)
+	_busy = true
+	_set_status("Thinking...", false)
+	_refresh()
+
+
+func _finish_hint() -> void:
+	var solution: Variant = _hint_job.solution
+	_hint_job = null
+	_busy = false
+	_refresh()
 	if solution == null or (solution as Array).is_empty():
 		_set_status("No hint found - try Undo or Add Tube")
 		return

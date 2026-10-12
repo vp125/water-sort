@@ -1,37 +1,70 @@
 class_name PuzzleSolver
 extends RefCounted
-## Depth-first solver used to verify generated levels are solvable.
-## Returns an Array[Vector2i] of (from, to) moves, or null if none found within budget.
+## Depth-first solver used to verify generated levels and to power hints.
+## A solution is an Array[Vector2i] of (from, to) moves; null if none was found within the budget.
 
 
+## Search state, so a search can be run in short slices (see `step`) instead of freezing the game.
+var done := false
+var solution: Variant = null  # Array[Vector2i] once found; null if none within the node budget
+var _capacity := 4
+var _max_nodes := 5000
+var _nodes: Array = []
+var _visited := {}
+var _stack: Array = []
+var _expanded := 0
+
+
+## Runs the whole search at once.
 static func solve(tubes: Array, capacity: int, max_nodes: int = 5000) -> Variant:
-	var start := _copy(tubes)
-	var nodes: Array = [{"tubes": start, "parent": -1, "move": Vector2i(-1, -1)}]
-	var visited := {_key(start): true}
-	var stack: Array = [0]
-	var expanded := 0
+	var job := begin(tubes, capacity, max_nodes)
+	job.step(0)
+	return job.solution
 
-	while not stack.is_empty():
-		var idx: int = stack.pop_back()
-		var current: Array = nodes[idx]["tubes"]
-		if PuzzleState.all_sorted(current, capacity):
-			return _path(nodes, idx)
-		expanded += 1
-		if expanded > max_nodes:
-			return null
-		var moves := _moves(current, capacity)
+
+## Prepares a search without running any of it. Call `step()` until `done`.
+static func begin(tubes: Array, capacity: int, max_nodes: int = 5000) -> PuzzleSolver:
+	var job := PuzzleSolver.new()
+	job._capacity = capacity
+	job._max_nodes = max_nodes
+	var start := _copy(tubes)
+	job._nodes = [{"tubes": start, "parent": -1, "move": Vector2i(-1, -1)}]
+	job._visited = {_key(start): true}
+	job._stack = [0]
+	return job
+
+
+## Searches for at most `budget_usec` microseconds (0 = until finished). Safe to call after `done`.
+func step(budget_usec: int = 0) -> void:
+	if done:
+		return
+	var started := Time.get_ticks_usec()
+	while not _stack.is_empty():
+		var idx: int = _stack.pop_back()
+		var current: Array = _nodes[idx]["tubes"]
+		if PuzzleState.all_sorted(current, _capacity):
+			solution = _path(_nodes, idx)
+			done = true
+			return
+		_expanded += 1
+		if _expanded > _max_nodes:
+			done = true
+			return
+		var moves := _moves(current, _capacity)
 		# Push in reverse so the most promising move is explored first.
 		for m in range(moves.size() - 1, -1, -1):
 			var move: Vector2i = moves[m]
 			var next := _copy(current)
-			PuzzleState.apply_pour(next, capacity, move.x, move.y)
+			PuzzleState.apply_pour(next, _capacity, move.x, move.y)
 			var key := _key(next)
-			if visited.has(key):
+			if _visited.has(key):
 				continue
-			visited[key] = true
-			nodes.append({"tubes": next, "parent": idx, "move": move})
-			stack.append(nodes.size() - 1)
-	return null
+			_visited[key] = true
+			_nodes.append({"tubes": next, "parent": idx, "move": move})
+			_stack.append(_nodes.size() - 1)
+		if budget_usec > 0 and Time.get_ticks_usec() - started >= budget_usec:
+			return
+	done = true
 
 
 static func _moves(tubes: Array, capacity: int) -> Array[Vector2i]:

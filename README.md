@@ -24,6 +24,7 @@ godot --path .                                   # play
 godot --headless --path . --import               # first time only
 godot --headless --path . -s tests/run_tests.gd  # run the tests
 python tools/generate_audio.py                   # regenerate all sounds and music
+godot --headless --path . -s tools/bake_levels.gd  # re-bake levels after changing level generation
 ```
 
 ## Exporting
