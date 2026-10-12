@@ -20,6 +20,7 @@ config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.0196, 0.0392, 0.1333, 1)
 boot_splash/show_image=false
 config/icon="res://assets/icons/app_icon_1024.png"
+run/low_processor_mode=true
 
 [autoload]
 
@@ -42,3 +43,8 @@ window/handheld/orientation=1
 textures/vram_compression/import_etc2_astc=true
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[audio]
+
+driver/output_latency.web=150
+general/default_playback_type.web=0

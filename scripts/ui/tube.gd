@@ -19,6 +19,8 @@ const RIM_H := 14.0
 const STREAM_WIDTH := 12.0
 const SURFACE_POINTS := 9
 const GLOW_RINGS := 6
+const IDLE_REDRAW_FPS := 20.0  # resting tubes only shimmer slightly; matches the background rate so they share frames
+const CORNER_DETAIL := 4  # segments per rounded corner (engine default is 8)
 const SELECT_COLOR := Color("#22d3ee")  # neon cyan
 const HINT_COLOR := Color("#e879f9")  # neon magenta
 
@@ -48,6 +50,9 @@ var _slosh := 0.0  # 1 right after a pour, decays to 0
 var _glass := StyleBoxFlat.new()
 var _rim := StyleBoxFlat.new()
 var _glow_rings: Array[StyleBoxFlat] = []
+var _cap := StyleBoxFlat.new()  # reused for the rounded bottom of the lowest liquid layer
+var _shine := StyleBoxFlat.new()  # reused for the glossy streaks
+var _redraw_clock := 0.0
 
 
 func _ready() -> void:
@@ -61,10 +66,15 @@ func _ready() -> void:
 	_rim.set_border_width_all(2)
 	_rim.border_color = Color(1, 1, 1, 0.9)
 	_rim.set_corner_radius_all(7)
+	_shine.set_corner_radius_all(4)
+	for style in [_glass, _rim, _cap, _shine]:
+		style.corner_detail = CORNER_DETAIL
 	for _i in GLOW_RINGS:
 		var ring := StyleBoxFlat.new()
 		ring.bg_color = Color(0, 0, 0, 0)
 		ring.set_border_width_all(3)
+		ring.corner_detail = CORNER_DETAIL
+		ring.anti_aliasing = false  # soft, low-alpha rings: edge smoothing is invisible and costs geometry
 		_glow_rings.append(ring)
 	_update_styles()
 
@@ -72,7 +82,11 @@ func _ready() -> void:
 func _process(delta: float) -> void:
 	_time += delta
 	_slosh = maxf(0.0, _slosh - delta * 0.9)
-	if not layers.is_empty() or selected or hinted:
+	# Redraw every frame only while something is animating; a resting tube just shimmers gently.
+	var busy := selected or hinted or _streaming or drain > 0.0 or fill > 0.0 or _slosh > 0.0
+	_redraw_clock += delta
+	if (busy or not layers.is_empty()) and (busy or _redraw_clock >= 1.0 / IDLE_REDRAW_FPS):
+		_redraw_clock = 0.0
 		queue_redraw()
 
 
@@ -168,10 +182,11 @@ func _apply_glow_style() -> Dictionary:
 func _draw() -> void:
 	var glow := _apply_glow_style()
 	var body := Rect2(0, RIM_H * 0.5, size.x, size.y - RIM_H * 0.5)
-	for i in _glow_rings.size():
-		var falloff := 1.0 - float(i) / _glow_rings.size()
-		_glow_rings[i].border_color = Color(glow["color"], glow["strength"] * falloff * falloff)
-		draw_style_box(_glow_rings[i], body.grow((i + 1) * 3.0))
+	if selected or hinted:  # an idle tube's glow is too faint to be worth drawing
+		for i in _glow_rings.size():
+			var falloff := 1.0 - float(i) / _glow_rings.size()
+			_glow_rings[i].border_color = Color(glow["color"], glow["strength"] * falloff * falloff)
+			draw_style_box(_glow_rings[i], body.grow((i + 1) * 3.0))
 	var layer_h := (size.y - TOP_PAD - PAD) / capacity
 	var radius := size.x * 0.5
 	draw_style_box(_glass, body)
@@ -251,12 +266,11 @@ func _draw_run(run: Dictionary, layer_h: float, is_top: bool) -> void:
 
 	# Rounded bottom cap, flat colour matching the gradient at that depth.
 	if rounded:
-		var cap := StyleBoxFlat.new()
-		cap.bg_color = top_c.lerp(bot_c, clampf((cap_top - y_top) / span, 0.0, 1.0))
-		cap.corner_radius_bottom_left = int(radius)
-		cap.corner_radius_bottom_right = int(radius)
+		_cap.bg_color = top_c.lerp(bot_c, clampf((cap_top - y_top) / span, 0.0, 1.0))
+		_cap.corner_radius_bottom_left = int(radius)
+		_cap.corner_radius_bottom_right = int(radius)
 		var cap_y := maxf(y_top, cap_top - 1.0)
-		draw_style_box(cap, Rect2(x0, cap_y, x1 - x0, y_bot - cap_y))
+		draw_style_box(_cap, Rect2(x0, cap_y, x1 - x0, y_bot - cap_y))
 
 	# Gradient body whose top edge ripples gently (only the topmost layer moves).
 	if y_flat_bot - y_top < 2.0:
@@ -280,7 +294,7 @@ func _draw_run(run: Dictionary, layer_h: float, is_top: bool) -> void:
 	draw_polygon(pts, cols)
 
 	# Meniscus: soft light line along the surface where this colour meets air / the next colour.
-	draw_polyline(edge, Color(1, 1, 1, 0.45), 2.5, true)
+	draw_polyline(edge, Color(1, 1, 1, 0.45), 2.5, false)
 
 
 func _draw_bubbles(layer_h: float) -> void:
@@ -315,12 +329,10 @@ func _draw_markers(layer_h: float) -> void:
 
 func _draw_highlights(radius: float) -> void:
 	# Long glossy streak down the left side, with a small companion dot.
-	var shine := StyleBoxFlat.new()
-	shine.bg_color = Color(1, 1, 1, 0.34)
-	shine.set_corner_radius_all(4)
-	draw_style_box(shine, Rect2(9, TOP_PAD + 6, 6, size.y * 0.46))
-	shine.bg_color = Color(1, 1, 1, 0.26)
-	draw_style_box(shine, Rect2(9, TOP_PAD + 6 + size.y * 0.46 + 8, 6, 9))
+	_shine.bg_color = Color(1, 1, 1, 0.34)
+	draw_style_box(_shine, Rect2(9, TOP_PAD + 6, 6, size.y * 0.46))
+	_shine.bg_color = Color(1, 1, 1, 0.26)
+	draw_style_box(_shine, Rect2(9, TOP_PAD + 6 + size.y * 0.46 + 8, 6, 9))
 	# Curved reflection hugging the rounded bottom, plus a faint streak on the right.
 	var centre := Vector2(size.x * 0.5, size.y - radius)
 	draw_arc(centre, radius - 9.0, PI * 0.62, PI * 0.88, 10, Color(1, 1, 1, 0.34), 3.0, true)

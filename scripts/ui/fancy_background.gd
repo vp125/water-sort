@@ -14,11 +14,13 @@ const GLOW_COLORS: Array[Color] = [
 ]
 const BLOB_COUNT := 9
 const PARTICLE_COUNT := 34
+const REDRAW_FPS := 20.0  # slow drifting lights look identical at 20 fps and cost a third of the frames
 
 var _glow_tex: GradientTexture2D
 var _blobs: Array[Dictionary] = []
 var _particles: Array[Dictionary] = []
 var _time := 0.0
+var _redraw_clock := 0.0
 
 
 func _ready() -> void:
@@ -62,7 +64,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_time += delta
-	queue_redraw()
+	_redraw_clock += delta
+	if _redraw_clock >= 1.0 / REDRAW_FPS:
+		_redraw_clock = 0.0
+		queue_redraw()
 
 
 func _draw() -> void:
